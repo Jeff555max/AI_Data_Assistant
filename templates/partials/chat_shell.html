@@ -1,0 +1,300 @@
+<section id="page-shell" class="chat-layout">
+    <div class="chat-stage panel">
+        <div class="chat-stage__header">
+            <div>
+                <p class="eyebrow">AI Workspace</p>
+                <h1>Чат по данным и файлам</h1>
+                <p class="subtle">
+                    Отправляйте текст, загружайте таблицы и изображения, стройте графики и сохраняйте результаты в файлы прямо в диалоге.
+                </p>
+                <div class="preview-meta">
+                    {% if ai_enabled %}
+                        <span>OpenAI: {{ ai_model }}</span>
+                    {% else %}
+                        <span>OpenAI не настроен</span>
+                    {% endif %}
+                </div>
+            </div>
+            <a class="ghost-btn" href="/">Новый чат</a>
+        </div>
+
+        <div id="chat-thread" class="chat-thread">
+            {% for message in messages %}
+                <article class="message message--{{ message.role }}">
+                    <div class="message__avatar">
+                        {% if message.role == "assistant" %}AI{% else %}You{% endif %}
+                    </div>
+                    <div class="message__body">
+                        <div class="message__meta">
+                            <strong>
+                                {% if message.role == "assistant" %}Data Assistant{% else %}Вы{% endif %}
+                            </strong>
+                            <span>{{ message.time_label }}</span>
+                        </div>
+
+                        <div class="message-text">{{ message.text }}</div>
+
+                        {% if message.attachments %}
+                            <div class="artifact-stack">
+                                {% for attachment in message.attachments %}
+                                    <div class="artifact-card">
+                                        <div>
+                                            <strong>{{ attachment.title }}</strong>
+                                            <div class="artifact-card__name">{{ attachment.name }}</div>
+                                            {% if attachment.description %}
+                                                <p>{{ attachment.description }}</p>
+                                            {% endif %}
+                                        </div>
+                                        <div class="artifact-card__actions">
+                                            {% if attachment.preview_url and attachment.kind == "chart" %}
+                                                <a class="ghost-btn" href="{{ attachment.preview_url }}" target="_blank" rel="noreferrer">Открыть</a>
+                                            {% endif %}
+                                            {% if attachment.download_url %}
+                                                <a class="secondary-btn" href="{{ attachment.download_url }}">Скачать</a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if attachment.preview_url and attachment.kind == "chart" %}
+                                        <img class="message-preview-image" src="{{ attachment.preview_url }}" alt="{{ attachment.name }}">
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% if message.preview %}
+                            <div class="preview-card">
+                                {% if message.preview.kind == "table" %}
+                                    <div class="preview-meta">
+                                        {% for item in message.preview.meta %}
+                                            <span>{{ item }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="table-wrap">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    {% for header in message.preview.headers %}
+                                                        <th>{{ header }}</th>
+                                                    {% endfor %}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for row in message.preview.rows %}
+                                                    <tr>
+                                                        {% for value in row %}
+                                                            <td>{{ value }}</td>
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <img class="message-preview-image" src="{{ message.preview.image_url }}" alt="Preview">
+                                    <div class="preview-meta">
+                                        {% for item in message.preview.meta %}
+                                            <span>{{ item }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
+                        {% if message.analysis %}
+                            <div class="analysis-card">
+                                <div class="stats-strip">
+                                    <span>{{ message.analysis.summary.rows }} rows/px</span>
+                                    <span>{{ message.analysis.summary.columns }} cols</span>
+                                    <span>{{ message.analysis.summary.numeric_columns }} numeric</span>
+                                    <span>{{ message.analysis.summary.missing_cells }} missing</span>
+                                </div>
+
+                                {% if message.analysis.insights %}
+                                    <div class="insight-list">
+                                        {% for insight in message.analysis.insights %}
+                                            <div class="insight-item">{{ insight }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
+                                {% if message.analysis.stats %}
+                                    <div class="table-wrap">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    {% for header in message.analysis.stats[0].keys() %}
+                                                        <th>{{ header }}</th>
+                                                    {% endfor %}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for row in message.analysis.stats %}
+                                                    <tr>
+                                                        {% for value in row.values() %}
+                                                            <td>{{ value }}</td>
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+
+        <form
+            class="composer"
+            hx-post="/chat/{{ conversation.conversation_id }}/message"
+            hx-target="#page-shell"
+            hx-swap="outerHTML"
+            hx-encoding="multipart/form-data"
+            enctype="multipart/form-data"
+        >
+            <div class="composer__top">
+                <textarea
+                    id="message-text"
+                    name="message_text"
+                    rows="1"
+                    placeholder="Например: проанализируй файл, построй histogram, создай отчёт или сохрани summary в markdown"
+                ></textarea>
+            </div>
+
+            <div class="composer__bottom">
+                <label class="attach-btn" for="data-file">
+                    <input
+                        id="data-file"
+                        name="data_file"
+                        type="file"
+                        accept=".csv,.xlsx,.xls,.json,.png,.jpg,.jpeg,.bmp,.gif,.webp"
+                    >
+                    <span>Файл или изображение</span>
+                </label>
+
+                <div id="selected-file-pill" class="selected-file-pill" hidden></div>
+
+                <div class="composer__actions">
+                    <button class="ghost-btn" type="button" data-prompt="Покажи предпросмотр активного файла">Preview</button>
+                    <button class="secondary-btn" type="button" data-prompt="Проанализируй текущий файл">Анализ</button>
+                    <button class="primary-btn" type="submit">Отправить</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <aside class="side-rail">
+        <section class="panel rail-section">
+            <div class="card-heading">
+                <h2>Текущий контекст</h2>
+                <p>Активный файл используется для анализа, графиков и экспорта.</p>
+            </div>
+
+            {% if active_preview %}
+                <div class="context-card">
+                    <div class="context-card__title">
+                        <strong>{{ active_preview.file.original_name }}</strong>
+                        <span>{{ active_preview.kind }}</span>
+                    </div>
+
+                    {% if active_preview.kind == "table" %}
+                        <div class="preview-meta">
+                            <span>{{ active_preview.row_count }} строк</span>
+                            <span>{{ active_preview.column_count }} колонок</span>
+                            <span>{{ active_preview.numeric_columns|length }} numeric</span>
+                        </div>
+                    {% else %}
+                        <img class="message-preview-image" src="{{ active_preview.storage_url }}" alt="{{ active_preview.file.original_name }}">
+                        <div class="preview-meta">
+                            <span>{{ active_preview.image_width }}x{{ active_preview.image_height }}</span>
+                            <span>{{ active_preview.image_mode }}</span>
+                            <span>{{ active_preview.image_format }}</span>
+                        </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="empty-card">
+                    <strong>Файл ещё не выбран</strong>
+                    <p>Загрузите таблицу или изображение прямо в поле сообщения.</p>
+                </div>
+            {% endif %}
+
+            <div class="quick-grid">
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                    <input type="hidden" name="message_text" value="Проанализируй текущий файл">
+                    <button class="secondary-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Сделать анализ</button>
+                </form>
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                    <input type="hidden" name="message_text" value="Построй histogram для активного файла">
+                    <button class="ghost-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Построить график</button>
+                </form>
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                    <input type="hidden" name="message_text" value="Сформируй отчёт по активному файлу">
+                    <button class="ghost-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Создать DOCX</button>
+                </form>
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                    <input type="hidden" name="message_text" value="Сохрани выводы в markdown">
+                    <button class="ghost-btn wide-btn" type="submit">Сохранить summary</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="panel rail-section">
+            <div class="card-heading">
+                <h2>Файлы в чате</h2>
+                <p>Можно быстро переключить активный файл.</p>
+            </div>
+
+            {% if files %}
+                <div class="file-list">
+                    {% for file in files %}
+                        <form
+                            class="file-chip-form"
+                            hx-post="/chat/{{ conversation.conversation_id }}/activate/{{ file.file_id }}"
+                            hx-target="#page-shell"
+                            hx-swap="outerHTML"
+                        >
+                            <button class="file-chip {% if file.is_active %}is-active{% endif %}" type="submit">
+                                <strong>{{ file.original_name }}</strong>
+                                <span>{{ file.kind }} · {{ file.size_kb }} KB · {{ file.time_label }}</span>
+                            </button>
+                        </form>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-card">
+                    <strong>Пока без вложений</strong>
+                    <p>Добавьте первый файл, и он появится здесь.</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <section class="panel rail-section">
+            <div class="card-heading">
+                <h2>Сохранённые артефакты</h2>
+                <p>Графики, отчёты и markdown-сводки остаются доступными для скачивания.</p>
+            </div>
+
+            {% if saved_artifacts %}
+                <div class="artifact-list">
+                    {% for artifact in saved_artifacts %}
+                        <a class="download-card" href="{{ artifact.download_url }}">
+                            <div>
+                                <strong>{{ artifact.name }}</strong>
+                                <span>{{ artifact.description or artifact.kind }}</span>
+                            </div>
+                            <span>Скачать</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-card">
+                    <strong>Артефактов ещё нет</strong>
+                    <p>Постройте график, сделайте отчёт или сохраните summary.</p>
+                </div>
+            {% endif %}
+        </section>
+    </aside>
+</section>

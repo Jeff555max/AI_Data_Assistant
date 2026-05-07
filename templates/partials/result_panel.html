@@ -1,0 +1,125 @@
+<section id="result-panel" class="result-stack">
+    {% if error_message %}
+        <div class="alert alert-error">{{ error_message }}</div>
+    {% endif %}
+    {% if success_message %}
+        <div class="alert alert-success">{{ success_message }}</div>
+    {% endif %}
+
+    {% if analysis %}
+        <div class="result-grid">
+            <article class="panel">
+                <div class="card-heading">
+                    <h2>Статистика</h2>
+                    <p>Базовый аналитический блок для текущего файла.</p>
+                </div>
+                <div class="stats-strip">
+                    <span>{{ analysis.summary.rows }} rows</span>
+                    <span>{{ analysis.summary.columns }} cols</span>
+                    <span>{{ analysis.summary.missing_cells }} missing</span>
+                </div>
+
+                {% if analysis.stats %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    {% for header in analysis.stats[0].keys() %}
+                                        <th>{{ header }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in analysis.stats %}
+                                    <tr>
+                                        {% for value in item.values() %}
+                                            <td>{{ value }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="muted-note">Для этого файла нет табличной числовой статистики, но доступны выводы и графики.</p>
+                {% endif %}
+
+                {% if analysis.missing_summary %}
+                    <div class="mini-table">
+                        <h3>NaN profile</h3>
+                        {% for item in analysis.missing_summary %}
+                            <div class="mini-row">
+                                <span>{{ item.column }}</span>
+                                <span>{{ item.missing }} ({{ item.percent }})</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </article>
+
+            <article class="panel">
+                <div class="card-heading">
+                    <h2>Выводы</h2>
+                    <p>Краткая интерпретация без перегруза деталями.</p>
+                </div>
+                <div class="insight-list">
+                    {% for insight in analysis.insights %}
+                        <div class="insight-item">{{ insight }}</div>
+                    {% endfor %}
+                </div>
+            </article>
+        </div>
+    {% else %}
+        <div class="panel empty-state">
+            <h2>Результаты появятся здесь</h2>
+            <p>Запустите анализ, график или генерацию отчета в панели действий.</p>
+        </div>
+    {% endif %}
+
+    <div class="result-grid">
+        <article class="panel">
+            <div class="card-heading">
+                <h2>Графики</h2>
+                <p>PNG-файлы сохраняются на сервере и отображаются в интерфейсе.</p>
+            </div>
+            {% if artifacts.charts %}
+                <div class="chart-grid">
+                    {% for chart in artifacts.charts %}
+                        <figure class="chart-card">
+                            <img src="{{ chart.storage_url }}" alt="{{ chart.name }}">
+                            <figcaption>
+                                <span>{{ chart.name }}</span>
+                                <a href="{{ chart.download_url }}">Скачать</a>
+                            </figcaption>
+                        </figure>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="muted-note">Пока нет сгенерированных графиков.</p>
+            {% endif %}
+        </article>
+
+        <article class="panel">
+            <div class="card-heading">
+                <h2>Отчёты и файлы</h2>
+                <p>Готовые результаты для выгрузки пользователю.</p>
+            </div>
+            <div class="download-stack">
+                {% if artifacts.reports %}
+                    {% for report in artifacts.reports %}
+                        <a class="download-card" href="{{ report.download_url }}">
+                            <strong>{{ report.name }}</strong>
+                            <span>DOCX report</span>
+                        </a>
+                    {% endfor %}
+                {% else %}
+                    <p class="muted-note">Отчет еще не сформирован.</p>
+                {% endif %}
+                <a class="download-card" href="{{ preview.storage_url }}">
+                    <strong>{{ preview.file.original_name }}</strong>
+                    <span>Исходный загруженный файл</span>
+                </a>
+            </div>
+        </article>
+    </div>
+</section>

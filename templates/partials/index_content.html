@@ -1,0 +1,62 @@
+<section id="page-shell" class="page-grid">
+    <div class="hero-card">
+        <p class="eyebrow">Production-ready data workspace</p>
+        <h1>Загружайте файлы, получайте preview, анализ, графики и готовые отчёты.</h1>
+        <p class="hero-text">
+            Интерфейс работает через FastAPI + Jinja2 + HTMX, без SPA и без публичного API.
+            Поддерживаются CSV, Excel, JSON и изображения.
+        </p>
+        <div class="hero-points">
+            <span>Preview первых строк</span>
+            <span>Статистика и NaN-профиль</span>
+            <span>PNG-графики на сервере</span>
+            <span>DOCX-отчёт для скачивания</span>
+        </div>
+    </div>
+
+    <div class="upload-card">
+        <div class="card-heading">
+            <h2>Загрузка файла</h2>
+            <p>Перетащите файл в зону ниже или выберите вручную.</p>
+        </div>
+
+        {% if error_message %}
+            <div class="alert alert-error">{{ error_message }}</div>
+        {% endif %}
+        {% if success_message %}
+            <div class="alert alert-success">{{ success_message }}</div>
+        {% endif %}
+
+        <form
+            class="upload-form"
+            hx-post="/upload"
+            hx-target="#page-shell"
+            hx-swap="outerHTML"
+            hx-encoding="multipart/form-data"
+            enctype="multipart/form-data"
+        >
+            <label class="dropzone" for="data-file">
+                <input id="data-file" name="data_file" type="file" accept=".csv,.xlsx,.xls,.json,.png,.jpg,.jpeg,.bmp,.gif,.webp" required>
+                <span class="dropzone-badge">Drag & drop</span>
+                <strong>Выберите CSV, Excel, JSON или изображение</strong>
+                <small>Лимит файла задаётся через `.env`. По умолчанию: 10MB.</small>
+            </label>
+            <button class="primary-btn" type="submit">Загрузить и открыть preview</button>
+        </form>
+
+        <div class="support-grid">
+            <article>
+                <h3>Табличные данные</h3>
+                <p>Автоопределение типов колонок, mean / median / std и разбор пропусков.</p>
+            </article>
+            <article>
+                <h3>Изображения</h3>
+                <p>Preview, анализ яркости и канальных значений, серверные графики по пикселям.</p>
+            </article>
+            <article>
+                <h3>Результаты</h3>
+                <p>Скачиваемые PNG-графики и DOCX-отчёт без перехода на внешний API.</p>
+            </article>
+        </div>
+    </div>
+</section>

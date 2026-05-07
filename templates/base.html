@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title or "AI Data Chat" }}</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script defer src="/static/js/app.js"></script>
+</head>
+<body>
+    <div class="page-backdrop"></div>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">AI</span>
+            <span>
+                <strong>AI Data Chat</strong>
+                <small>чат для файлов, графиков и отчётов</small>
+            </span>
+        </a>
+        <nav class="topnav">
+            <a href="/">Новый чат</a>
+        </nav>
+    </header>
+
+    <main class="page-frame">
+        {% block shell %}{% endblock %}
+    </main>
+
+    <div id="global-loader" class="global-loader htmx-indicator">
+        <div class="loader-ring"></div>
+        <span>Выполняем запрос…</span>
+    </div>
+</body>
+</html>
