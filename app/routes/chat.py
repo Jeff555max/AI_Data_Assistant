@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 
 from app.routes.pages import chat_service, render_page
 from app.services.chat_service import ChatNotFoundError
@@ -13,10 +13,11 @@ async def send_message(
     request: Request,
     conversation_id: str,
     message_text: str = Form(default=""),
+    force_action: str = Form(default=""),
     data_file: UploadFile | None = File(default=None),
 ):
     try:
-        conversation = await chat_service.process_turn(conversation_id, message_text, data_file)
+        conversation = await chat_service.process_turn(conversation_id, message_text, data_file, force_action)
     except ChatNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Чат не найден.") from exc
 

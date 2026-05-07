@@ -89,6 +89,7 @@ class ChatService:
         conversation_id: str,
         message_text: str,
         upload: UploadFile | None = None,
+        force_action: str | None = None,
     ) -> dict[str, Any]:
         conversation = self.get_conversation(conversation_id)
         text = (message_text or "").strip()
@@ -122,6 +123,14 @@ class ChatService:
         active_file = uploaded_file or self._get_active_file(conversation)
         raw_preview_context = self.file_service.build_preview_context(active_file) if active_file else None
         active_file_context = self._build_ai_file_context(active_file) if active_file else None
+        forced_prompt = self._forced_action_prompt(force_action)
+
+        if forced_prompt:
+            assistant_message = self._handle_local_prompt(conversation, forced_prompt, active_file)
+            if uploaded_file and not assistant_message.get("preview"):
+                self._attach_uploaded_file(assistant_message, uploaded_file, raw_preview_context)
+            conversation["messages"].append(assistant_message)
+            return self._persist(conversation)
 
         try:
             plan = self.ai_service.plan_response(
@@ -559,6 +568,16 @@ class ChatService:
         if any(token in normalized for token in ("preview", "предпрос", "покажи", "просмотр")):
             return "preview"
         return "help"
+
+    def _forced_action_prompt(self, force_action: str | None) -> str | None:
+        action = (force_action or "").strip().lower()
+        return {
+            "preview": "Покажи предпросмотр активного файла",
+            "analyze": "Проанализируй текущий файл",
+            "chart": "Построй histogram для активного файла",
+            "report": "Сформируй отчёт по активному файлу",
+            "save": "Сохрани выводы в markdown",
+        }.get(action)
 
     def _detect_chart_type(self, normalized: str) -> str:
         if any(token in normalized for token in ("hist", "гист")):

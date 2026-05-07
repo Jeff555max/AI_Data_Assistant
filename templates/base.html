@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title or "AI Data Chat" }}</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/styles.css?v=20260507-progress-actions">
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <script defer src="/static/js/app.js"></script>
+    <script defer src="/static/js/app.js?v=20260507-progress-actions"></script>
 </head>
 <body>
     <div class="page-backdrop"></div>
@@ -27,9 +27,15 @@
         {% block shell %}{% endblock %}
     </main>
 
-    <div id="global-loader" class="global-loader htmx-indicator">
+    <div id="global-loader" class="global-loader htmx-indicator" role="status" aria-live="polite" aria-hidden="true">
         <div class="loader-ring"></div>
-        <span>Выполняем запрос…</span>
+        <div class="loader-copy">
+            <strong id="global-loader-title">Идёт обработка и анализ…</strong>
+            <span id="global-loader-percent">0%</span>
+            <div class="loader-progress" aria-hidden="true">
+                <div id="global-loader-bar" class="loader-progress__bar"></div>
+            </div>
+        </div>
     </div>
 </body>
 </html>

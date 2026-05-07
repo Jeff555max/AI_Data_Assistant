@@ -151,8 +151,11 @@
             hx-post="/chat/{{ conversation.conversation_id }}/message"
             hx-target="#page-shell"
             hx-swap="outerHTML"
+            hx-indicator="#processing-panel"
             hx-encoding="multipart/form-data"
             enctype="multipart/form-data"
+            data-progress-form
+            data-processing-label="Идёт обработка и анализ, пожалуйста подождите…"
         >
             <div class="composer__top">
                 <textarea
@@ -222,22 +225,36 @@
             {% endif %}
 
             <div class="quick-grid">
-                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Идёт анализ файла, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Проанализируй текущий файл">
-                    <button class="secondary-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Сделать анализ</button>
+                    <input type="hidden" name="force_action" value="analyze">
+                    <button class="secondary-btn action-btn action-btn--analyze wide-btn" type="submit" data-processing-label="Идёт анализ файла, пожалуйста подождите…" {% if not active_preview %}disabled{% endif %}>Сделать анализ</button>
                 </form>
-                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Строим график, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Построй histogram для активного файла">
-                    <button class="ghost-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Построить график</button>
+                    <input type="hidden" name="force_action" value="chart">
+                    <button class="primary-btn action-btn action-btn--chart wide-btn" type="submit" data-processing-label="Строим график, пожалуйста подождите…" {% if not active_preview %}disabled{% endif %}>Построить график</button>
                 </form>
-                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Создаём DOCX-отчёт, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Сформируй отчёт по активному файлу">
-                    <button class="ghost-btn wide-btn" type="submit" {% if not active_preview %}disabled{% endif %}>Создать DOCX</button>
+                    <input type="hidden" name="force_action" value="report">
+                    <button class="primary-btn action-btn action-btn--report wide-btn" type="submit" data-processing-label="Создаём DOCX-отчёт, пожалуйста подождите…" {% if not active_preview %}disabled{% endif %}>Создать DOCX</button>
                 </form>
-                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML">
+                <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Сохраняем summary, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Сохрани выводы в markdown">
-                    <button class="ghost-btn wide-btn" type="submit">Сохранить summary</button>
+                    <input type="hidden" name="force_action" value="save">
+                    <button class="primary-btn action-btn action-btn--summary wide-btn" type="submit" data-processing-label="Сохраняем summary, пожалуйста подождите…">Сохранить summary</button>
                 </form>
+            </div>
+
+            <div id="processing-panel" class="processing-panel htmx-indicator" data-processing-panel aria-live="polite">
+                <div class="processing-panel__header">
+                    <strong data-progress-title>Готово к обработке. Запустите действие.</strong>
+                    <span data-progress-percent>0%</span>
+                </div>
+                <div class="processing-panel__bar" aria-hidden="true">
+                    <div data-progress-bar class="processing-panel__fill"></div>
+                </div>
             </div>
         </section>
 
