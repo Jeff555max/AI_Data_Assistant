@@ -18,7 +18,7 @@ AI-чат на FastAPI + Jinja2 + HTMX, который использует Open
 
 ```env
 OPENAI_API_KEY=your_api_key
-OPENAI_MODEL=gpt-5-mini
+OPENAI_MODEL=gpt-4o
 OPENAI_MAX_HISTORY_MESSAGES=8
 ```
 

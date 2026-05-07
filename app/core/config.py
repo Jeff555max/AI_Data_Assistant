@@ -60,6 +60,6 @@ def get_settings() -> Settings:
         static_dir=BASE_DIR / "static",
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
-        openai_model=os.getenv("OPENAI_MODEL", "gpt-5-mini"),
+        openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
         openai_max_history_messages=int(os.getenv("OPENAI_MAX_HISTORY_MESSAGES", "8")),
     )
