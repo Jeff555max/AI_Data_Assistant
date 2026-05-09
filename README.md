@@ -58,5 +58,5 @@ docker-compose up --build -d
 
 ## Пример данных
 
-Используйте файл `examples/sample_sales.csv`.
+Используйте файлы `examples\sample_sales_data.xlsx` и `examples\sample_sales_data.csv`
 # AI_Data_Assistant
