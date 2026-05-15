@@ -17,6 +17,11 @@ from PIL import Image, UnidentifiedImageError
 
 from app.core.config import Settings, get_settings
 
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover - handled at runtime when dependency is absent
+    PdfReader = None  # type: ignore[assignment]
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,7 @@ SUPPORTED_EXTENSIONS = {
     ".bmp": "image",
     ".gif": "image",
     ".webp": "image",
+    ".pdf": "pdf",
 }
 
 
@@ -97,7 +103,7 @@ class FileService:
         kind = SUPPORTED_EXTENSIONS.get(extension)
         if not kind:
             raise UnsupportedFileError(
-                "Поддерживаются CSV, Excel, JSON и изображения PNG/JPG/JPEG/BMP/GIF/WEBP."
+                "Поддерживаются CSV, Excel, JSON, PDF и изображения PNG/JPG/JPEG/BMP/GIF/WEBP."
             )
 
         file_id = uuid4().hex
@@ -176,6 +182,44 @@ class FileService:
             raise FileReadError("Не удалось прочитать изображение.") from exc
         return image
 
+    def read_pdf_text(self, stored_file: StoredFile, max_pages: int | None = None) -> dict[str, Any]:
+        if PdfReader is None:
+            raise FileReadError(
+                "Для чтения PDF нужен пакет `pypdf`. Выполните `pip install -r requirements.txt`."
+            )
+
+        if stored_file.extension != ".pdf":
+            raise FileReadError("Этот файл не является PDF.")
+
+        try:
+            reader = PdfReader(str(stored_file.path))
+            if reader.is_encrypted:
+                decrypt_result = reader.decrypt("")
+                if decrypt_result == 0:
+                    raise FileReadError("PDF защищён паролем. Загрузите файл без пароля.")
+
+            page_count = len(reader.pages)
+            pages_to_read = page_count if max_pages is None else min(page_count, max(max_pages, 0))
+            page_texts = []
+            for page_number in range(pages_to_read):
+                text = reader.pages[page_number].extract_text() or ""
+                page_texts.append(text.strip())
+        except FileReadError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to read PDF %s", stored_file.path)
+            raise FileReadError("Не удалось прочитать PDF. Проверьте формат и защиту файла.") from exc
+
+        text = "\n\n".join(item for item in page_texts if item)
+        words = re.findall(r"[\wА-Яа-яЁё]+", text, flags=re.UNICODE)
+        return {
+            "page_count": page_count,
+            "pages_read": pages_to_read,
+            "text": text,
+            "char_count": len(text),
+            "word_count": len(words),
+        }
+
     def build_preview_context(self, stored_file: StoredFile, rows: int = 15) -> dict[str, Any]:
         base_context: dict[str, Any] = {
             "file": stored_file,
@@ -206,6 +250,20 @@ class FileService:
                 "dimension_columns": dimension_columns or all_columns,
                 "recommended_x": (dimension_columns or all_columns or [""])[0],
                 "recommended_y": (numeric_columns or all_columns or [""])[0],
+            }
+
+        if stored_file.kind == "pdf":
+            pdf = self.read_pdf_text(stored_file)
+            excerpt = pdf["text"][:4000]
+            return {
+                **base_context,
+                "kind": "pdf",
+                "page_count": pdf["page_count"],
+                "preview_pages": pdf["pages_read"],
+                "word_count": pdf["word_count"],
+                "char_count": pdf["char_count"],
+                "text_excerpt": excerpt,
+                "has_text": bool(excerpt.strip()),
             }
 
         image = self.open_image(stored_file)

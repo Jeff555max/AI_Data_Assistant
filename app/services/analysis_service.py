@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from collections import Counter
 from typing import Any
 
 import numpy as np
@@ -19,7 +21,9 @@ class AnalysisService:
     def analyze(self, stored_file: StoredFile) -> dict[str, Any]:
         if stored_file.kind == "table":
             return self._analyze_table(stored_file)
-        return self._analyze_image(stored_file)
+        if stored_file.kind == "image":
+            return self._analyze_image(stored_file)
+        return self._analyze_pdf(stored_file)
 
     def _analyze_table(self, stored_file: StoredFile) -> dict[str, Any]:
         dataframe = self.file_service.read_dataframe(stored_file)
@@ -138,8 +142,94 @@ class AnalysisService:
             "insights": insights,
         }
 
+    def _analyze_pdf(self, stored_file: StoredFile) -> dict[str, Any]:
+        pdf = self.file_service.read_pdf_text(stored_file)
+        text = pdf["text"]
+        words = re.findall(r"[\wА-Яа-яЁё]+", text.lower(), flags=re.UNICODE)
+        meaningful_words = [
+            word for word in words
+            if len(word) > 3 and word not in self._pdf_stop_words()
+        ]
+        top_terms = Counter(meaningful_words).most_common(8)
+
+        stats = [
+            {"metric": "Страниц", "value": self.file_service.format_value(pdf["page_count"])},
+            {"metric": "Слов", "value": self.file_service.format_value(pdf["word_count"])},
+            {"metric": "Символов", "value": self.file_service.format_value(pdf["char_count"])},
+        ]
+        if top_terms:
+            stats.extend(
+                {
+                    "metric": f"Частый термин: {term}",
+                    "value": self.file_service.format_value(count),
+                }
+                for term, count in top_terms[:5]
+            )
+
+        insights = [
+            f"PDF содержит {pdf['page_count']} стр. и примерно {pdf['word_count']:,} слов.".replace(",", " "),
+        ]
+        if text.strip():
+            insights.append("Текст успешно извлечён и доступен для AI-анализа, отчёта и markdown-сводки.")
+        else:
+            insights.append(
+                "Из PDF не удалось извлечь текстовый слой. Возможно, это скан; для глубокого анализа понадобится OCR."
+            )
+        if top_terms:
+            terms = ", ".join(term for term, _ in top_terms[:5])
+            insights.append(f"Самые частые содержательные термины: {terms}.")
+
+        logger.info("Completed PDF analysis for %s", stored_file.file_id)
+        return {
+            "kind": "pdf",
+            "summary": {
+                "rows": int(pdf["page_count"]),
+                "columns": int(pdf["word_count"]),
+                "numeric_columns": 0,
+                "missing_cells": 0,
+                "pages": int(pdf["page_count"]),
+                "words": int(pdf["word_count"]),
+                "characters": int(pdf["char_count"]),
+            },
+            "column_profile": [],
+            "stats": stats,
+            "missing_summary": [],
+            "insights": insights,
+        }
+
     def _to_float(self, value: str) -> float:
         try:
             return float(str(value).replace(" ", ""))
         except ValueError:
             return 0.0
+
+    def _pdf_stop_words(self) -> set[str]:
+        return {
+            "для",
+            "или",
+            "это",
+            "как",
+            "при",
+            "что",
+            "если",
+            "также",
+            "the",
+            "and",
+            "with",
+            "from",
+            "this",
+            "that",
+            "или",
+            "на",
+            "по",
+            "из",
+            "под",
+            "над",
+            "без",
+            "его",
+            "её",
+            "она",
+            "они",
+            "мы",
+            "вы",
+        }

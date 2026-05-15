@@ -38,8 +38,10 @@ class ChartService:
         self.file_service.ensure_storage()
         if stored_file.kind == "table":
             chart = self._generate_table_chart(stored_file, chart_type, x_column, y_column)
-        else:
+        elif stored_file.kind == "image":
             chart = self._generate_image_chart(stored_file, chart_type)
+        else:
+            raise FileReadError("Для PDF графики не поддерживаются. Запустите анализ, отчёт или markdown-сводку.")
 
         logger.info("Generated %s chart for %s", chart_type, stored_file.file_id)
         return chart
@@ -65,8 +67,18 @@ class ChartService:
         numeric_columns = [item["name"] for item in columns if item["kind"] == "numeric"]
         dimension_columns = [item["name"] for item in columns if item["kind"] in {"categorical", "datetime"}]
 
-        selected_x = x_column or (dimension_columns or list(dataframe.columns))[0]
-        selected_y = y_column or (numeric_columns or list(dataframe.columns))[0]
+        selected_x = self._resolve_column(
+            dataframe,
+            x_column,
+            (dimension_columns or list(dataframe.columns))[0],
+            "оси X",
+        )
+        selected_y = self._resolve_column(
+            dataframe,
+            y_column,
+            (numeric_columns or list(dataframe.columns))[0],
+            "оси Y",
+        )
         file_name = self._build_output_name(stored_file.file_id, chart_type, "png")
         output_path = self.settings.output_dir / file_name
 
@@ -77,7 +89,7 @@ class ChartService:
         if chart_type == "histogram":
             if not numeric_columns:
                 raise FileReadError("Для histogram нужен хотя бы один числовой столбец.")
-            selected_x = x_column or numeric_columns[0]
+            selected_x = self._resolve_column(dataframe, x_column, numeric_columns[0], "histogram")
             series = pd.to_numeric(dataframe[selected_x], errors="coerce").dropna()
             if series.empty:
                 raise FileReadError("Недостаточно числовых значений для histogram.")
@@ -109,8 +121,13 @@ class ChartService:
             description = f"Линейная динамика «{selected_y}» по оси «{selected_x}»."
         else:
             if numeric_columns:
-                group_x = x_column or (dimension_columns or list(dataframe.columns))[0]
-                group_y = y_column or numeric_columns[0]
+                group_x = self._resolve_column(
+                    dataframe,
+                    x_column,
+                    (dimension_columns or list(dataframe.columns))[0],
+                    "категорий",
+                )
+                group_y = self._resolve_column(dataframe, y_column, numeric_columns[0], "значений")
                 grouped = (
                     dataframe[[group_x, group_y]]
                     .copy()
@@ -145,6 +162,44 @@ class ChartService:
             "storage_url": f"/storage/outputs/{file_name}",
             "download_url": f"/download/{file_name}",
         }
+
+    def _resolve_column(
+        self,
+        dataframe: pd.DataFrame,
+        requested_column: str | None,
+        fallback_column: Any,
+        role: str,
+    ) -> Any:
+        fallback = self._match_column(dataframe, fallback_column)
+        if not requested_column:
+            if fallback is not None:
+                return fallback
+            raise FileReadError("Не удалось выбрать колонку для построения графика.")
+
+        matched = self._match_column(dataframe, requested_column)
+        if matched is not None:
+            return matched
+
+        available = ", ".join(str(column) for column in dataframe.columns[:12])
+        if len(dataframe.columns) > 12:
+            available += ", ..."
+        raise FileReadError(
+            f"Колонка для {role} «{requested_column}» не найдена. "
+            f"Доступные колонки: {available}."
+        )
+
+    def _match_column(self, dataframe: pd.DataFrame, column_name: Any) -> Any | None:
+        target = str(column_name).strip()
+        for column in dataframe.columns:
+            if str(column).strip() == target:
+                return column
+
+        lowered_target = target.lower()
+        for column in dataframe.columns:
+            if str(column).strip().lower() == lowered_target:
+                return column
+
+        return None
 
     def _generate_image_chart(self, stored_file: StoredFile, chart_type: str) -> dict[str, Any]:
         image = self.file_service.open_image(stored_file)

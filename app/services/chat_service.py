@@ -63,7 +63,7 @@ class ChatService:
         created_at = _utc_now()
         greeting = (
             "Я подключён к OpenAI и работаю как AI-ассистент по данным. "
-            "Можно отправить обычный текст, загрузить таблицу или изображение, попросить анализ, график, отчёт или сохранить выводы в файл."
+            "Можно отправить обычный текст, загрузить таблицу, PDF или изображение, попросить анализ, график, отчёт или сохранить выводы в файл."
         )
         conversation = {
             "conversation_id": conversation_id,
@@ -322,6 +322,22 @@ class ChatService:
             context["insights"] = analysis["insights"][:5]
             return context
 
+        if preview["kind"] == "pdf":
+            analysis = self.analysis_service.analyze(stored_file)
+            context.update(
+                {
+                    "preview_kind": "pdf",
+                    "page_count": preview["page_count"],
+                    "preview_pages": preview["preview_pages"],
+                    "word_count": preview["word_count"],
+                    "char_count": preview["char_count"],
+                    "text_excerpt": preview["text_excerpt"],
+                    "has_text": preview["has_text"],
+                    "insights": analysis["insights"][:5],
+                }
+            )
+            return context
+
         context.update(
             {
                 "preview_kind": "image",
@@ -348,18 +364,18 @@ class ChatService:
             if not active_file:
                 return self._new_message(
                     "assistant",
-                    "Пока нет активного файла. Загрузите CSV, Excel, JSON или изображение. После этого можно попросить анализ, график, отчёт или сохранение в файл.",
+                    "Пока нет активного файла. Загрузите CSV, Excel, JSON, PDF или изображение. После этого можно попросить анализ, график, отчёт или сохранение в файл.",
                 )
 
             return self._new_message(
                 "assistant",
-                "Для активного файла могу показать предпросмотр, собрать анализ, построить `histogram`, `bar` или `line`, сделать DOCX-отчёт и сохранить краткую markdown-сводку. Для выбора колонок напишите, например: `Построй line chart x: date y: revenue`.",
+                "Для активного файла могу показать предпросмотр, собрать анализ, сделать DOCX-отчёт и сохранить краткую markdown-сводку. Для таблиц и изображений также доступны `histogram`, `bar` и `line`. Для выбора колонок напишите, например: `Построй line chart x: date y: revenue`.",
             )
 
         if not active_file:
             return self._new_message(
                 "assistant",
-                "Сначала нужен файл или изображение. После загрузки я смогу строить графики и сохранять результаты.",
+                "Сначала нужен файл. После загрузки я смогу анализировать данные и сохранять результаты.",
             )
 
         if action == "preview":
@@ -530,6 +546,18 @@ class ChatService:
                     f"{len(preview['numeric_columns'])} numeric",
                 ],
             }
+        if preview["kind"] == "pdf":
+            return {
+                "kind": "pdf",
+                "text_excerpt": preview["text_excerpt"],
+                "has_text": preview["has_text"],
+                "storage_url": preview["storage_url"],
+                "meta": [
+                    f"{preview['page_count']} стр.",
+                    f"{preview['word_count']} слов",
+                    f"{preview['char_count']} символов",
+                ],
+            }
         return {
             "kind": "image",
             "image_url": preview["storage_url"],
@@ -542,6 +570,7 @@ class ChatService:
 
     def _compact_analysis(self, analysis: dict[str, Any]) -> dict[str, Any]:
         return {
+            "kind": analysis.get("kind"),
             "summary": analysis["summary"],
             "insights": analysis.get("insights", [])[:4],
             "stats": analysis.get("stats", [])[:6],
@@ -549,6 +578,13 @@ class ChatService:
 
     def _analysis_message_text(self, stored_file: StoredFile, analysis: dict[str, Any]) -> str:
         summary = analysis["summary"]
+        if analysis.get("kind") == "pdf":
+            return (
+                f"Анализ PDF «{stored_file.original_name}» готов. "
+                f"Страниц: {summary.get('pages', summary['rows'])}, "
+                f"слов: {summary.get('words', summary['columns'])}, "
+                f"символов: {summary.get('characters', 0)}."
+            )
         return (
             f"Анализ для «{stored_file.original_name}» готов. "
             f"База: {summary['rows']} x {summary['columns']}, "

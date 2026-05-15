@@ -358,6 +358,31 @@ th {
     border: 1px solid rgba(28, 92, 120, 0.08);
 }
 
+.text-preview {
+    max-height: 420px;
+    overflow: auto;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: white;
+}
+
+.text-preview--compact {
+    max-height: 220px;
+}
+
+.text-preview pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    line-height: 1.55;
+}
+
+.muted-note {
+    color: var(--muted);
+}
+
 .composer {
     display: grid;
     gap: 0.8rem;

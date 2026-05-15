@@ -5,7 +5,7 @@
                 <p class="eyebrow">AI Workspace</p>
                 <h1>Чат по данным и файлам</h1>
                 <p class="subtle">
-                    Отправляйте текст, загружайте таблицы и изображения, стройте графики и сохраняйте результаты в файлы прямо в диалоге.
+                    Отправляйте текст, загружайте таблицы, PDF и изображения, стройте графики и сохраняйте результаты в файлы прямо в диалоге.
                 </p>
                 <div class="preview-meta">
                     {% if ai_enabled %}
@@ -89,6 +89,19 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                {% elif message.preview.kind == "pdf" %}
+                                    <div class="preview-meta">
+                                        {% for item in message.preview.meta %}
+                                            <span>{{ item }}</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% if message.preview.has_text %}
+                                        <div class="text-preview text-preview--compact">
+                                            <pre>{{ message.preview.text_excerpt }}</pre>
+                                        </div>
+                                    {% else %}
+                                        <p class="muted-note">В PDF не найден извлекаемый текстовый слой.</p>
+                                    {% endif %}
                                 {% else %}
                                     <img class="message-preview-image" src="{{ message.preview.image_url }}" alt="Preview">
                                     <div class="preview-meta">
@@ -102,12 +115,20 @@
 
                         {% if message.analysis %}
                             <div class="analysis-card">
-                                <div class="stats-strip">
-                                    <span>{{ message.analysis.summary.rows }} rows/px</span>
-                                    <span>{{ message.analysis.summary.columns }} cols</span>
-                                    <span>{{ message.analysis.summary.numeric_columns }} numeric</span>
-                                    <span>{{ message.analysis.summary.missing_cells }} missing</span>
-                                </div>
+                                {% if message.analysis.kind == "pdf" %}
+                                    <div class="stats-strip">
+                                        <span>{{ message.analysis.summary.pages }} стр.</span>
+                                        <span>{{ message.analysis.summary.words }} слов</span>
+                                        <span>{{ message.analysis.summary.characters }} символов</span>
+                                    </div>
+                                {% else %}
+                                    <div class="stats-strip">
+                                        <span>{{ message.analysis.summary.rows }} rows/px</span>
+                                        <span>{{ message.analysis.summary.columns }} cols</span>
+                                        <span>{{ message.analysis.summary.numeric_columns }} numeric</span>
+                                        <span>{{ message.analysis.summary.missing_cells }} missing</span>
+                                    </div>
+                                {% endif %}
 
                                 {% if message.analysis.insights %}
                                     <div class="insight-list">
@@ -172,9 +193,9 @@
                         id="data-file"
                         name="data_file"
                         type="file"
-                        accept=".csv,.xlsx,.xls,.json,.png,.jpg,.jpeg,.bmp,.gif,.webp"
+                        accept=".csv,.xlsx,.xls,.json,.pdf,.png,.jpg,.jpeg,.bmp,.gif,.webp"
                     >
-                    <span>Файл или изображение</span>
+                    <span>Файл</span>
                 </label>
 
                 <div id="selected-file-pill" class="selected-file-pill" hidden></div>
@@ -208,6 +229,19 @@
                             <span>{{ active_preview.column_count }} колонок</span>
                             <span>{{ active_preview.numeric_columns|length }} numeric</span>
                         </div>
+                    {% elif active_preview.kind == "pdf" %}
+                        <div class="preview-meta">
+                            <span>{{ active_preview.page_count }} стр.</span>
+                            <span>{{ active_preview.word_count }} слов</span>
+                            <span>{{ active_preview.char_count }} символов</span>
+                        </div>
+                        {% if active_preview.has_text %}
+                            <div class="text-preview text-preview--compact">
+                                <pre>{{ active_preview.text_excerpt }}</pre>
+                            </div>
+                        {% else %}
+                            <p class="muted-note">В PDF не найден извлекаемый текстовый слой.</p>
+                        {% endif %}
                     {% else %}
                         <img class="message-preview-image" src="{{ active_preview.storage_url }}" alt="{{ active_preview.file.original_name }}">
                         <div class="preview-meta">
@@ -233,7 +267,7 @@
                 <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Строим график, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Построй histogram для активного файла">
                     <input type="hidden" name="force_action" value="chart">
-                    <button class="primary-btn action-btn action-btn--chart wide-btn" type="submit" data-processing-label="Строим график, пожалуйста подождите…" {% if not active_preview %}disabled{% endif %}>Построить график</button>
+                    <button class="primary-btn action-btn action-btn--chart wide-btn" type="submit" data-processing-label="Строим график, пожалуйста подождите…" {% if not active_preview or active_preview.kind == "pdf" %}disabled{% endif %}>Построить график</button>
                 </form>
                 <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Создаём DOCX-отчёт, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Сформируй отчёт по активному файлу">

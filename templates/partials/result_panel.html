@@ -13,11 +13,19 @@
                     <h2>Статистика</h2>
                     <p>Базовый аналитический блок для текущего файла.</p>
                 </div>
-                <div class="stats-strip">
-                    <span>{{ analysis.summary.rows }} rows</span>
-                    <span>{{ analysis.summary.columns }} cols</span>
-                    <span>{{ analysis.summary.missing_cells }} missing</span>
-                </div>
+                {% if analysis.kind == "pdf" %}
+                    <div class="stats-strip">
+                        <span>{{ analysis.summary.pages }} стр.</span>
+                        <span>{{ analysis.summary.words }} слов</span>
+                        <span>{{ analysis.summary.characters }} символов</span>
+                    </div>
+                {% else %}
+                    <div class="stats-strip">
+                        <span>{{ analysis.summary.rows }} rows</span>
+                        <span>{{ analysis.summary.columns }} cols</span>
+                        <span>{{ analysis.summary.missing_cells }} missing</span>
+                    </div>
+                {% endif %}
 
                 {% if analysis.stats %}
                     <div class="table-wrap">

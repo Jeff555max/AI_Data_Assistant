@@ -70,6 +70,11 @@ async def preview_page(request: Request, file_id: str):
     stored_file = file_service.get_file(file_id)
     preview_context = file_service.build_preview_context(stored_file)
     artifacts = file_service.get_output_artifacts(file_id)
+    success_message = (
+        "Файл загружен. Можно запускать анализ, отчёт и сохранение summary."
+        if stored_file.kind == "pdf"
+        else "Файл загружен. Можно запускать анализ и строить графики."
+    )
     return render_page(
         request,
         "preview.html",
@@ -81,7 +86,7 @@ async def preview_page(request: Request, file_id: str):
             "artifacts": artifacts,
             "analysis": None,
             "error_message": None,
-            "success_message": "Файл загружен. Можно запускать анализ и строить графики.",
+            "success_message": success_message,
         },
     )
 

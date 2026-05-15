@@ -41,17 +41,24 @@ class ExportService:
 
         if analysis:
             summary = analysis.get("summary", {})
-            lines.extend(
-                [
-                    "",
-                    "## Analysis Snapshot",
-                    "",
-                    f"- Rows / height: {summary.get('rows', 0)}",
-                    f"- Columns / width: {summary.get('columns', 0)}",
-                    f"- Numeric metrics: {summary.get('numeric_columns', 0)}",
-                    f"- Missing cells: {summary.get('missing_cells', 0)}",
-                ]
-            )
+            lines.extend(["", "## Analysis Snapshot", ""])
+            if analysis.get("kind") == "pdf":
+                lines.extend(
+                    [
+                        f"- Pages: {summary.get('pages', summary.get('rows', 0))}",
+                        f"- Words: {summary.get('words', summary.get('columns', 0))}",
+                        f"- Characters: {summary.get('characters', 0)}",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        f"- Rows / height: {summary.get('rows', 0)}",
+                        f"- Columns / width: {summary.get('columns', 0)}",
+                        f"- Numeric metrics: {summary.get('numeric_columns', 0)}",
+                        f"- Missing cells: {summary.get('missing_cells', 0)}",
+                    ]
+                )
             insights = analysis.get("insights", [])[:5]
             if insights:
                 lines.extend(["", "## Key Insights", ""])

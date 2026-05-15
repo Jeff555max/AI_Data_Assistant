@@ -45,12 +45,7 @@ class ReportService:
         header_cells = summary_table.rows[0].cells
         header_cells[0].text = "Метрика"
         header_cells[1].text = "Значение"
-        for label, value in {
-            "Rows / Height": analysis["summary"]["rows"],
-            "Columns / Width": analysis["summary"]["columns"],
-            "Numeric metrics": analysis["summary"]["numeric_columns"],
-            "Missing cells": analysis["summary"]["missing_cells"],
-        }.items():
+        for label, value in self._summary_rows(analysis).items():
             row = summary_table.add_row().cells
             row[0].text = str(label)
             row[1].text = str(value)
@@ -95,9 +90,21 @@ class ReportService:
                 for index, value in enumerate(row_values[: len(headers)]):
                     cells[index].text = str(value)
         else:
-            document.add_paragraph(
-                f"Изображение {preview_context['image_width']}×{preview_context['image_height']} ({preview_context['image_mode']})"
-            )
+            if stored_file.kind == "pdf":
+                document.add_paragraph(
+                    f"PDF: {preview_context['page_count']} стр., "
+                    f"{preview_context['word_count']} слов, "
+                    f"{preview_context['char_count']} символов."
+                )
+                excerpt = preview_context.get("text_excerpt", "").strip()
+                if excerpt:
+                    document.add_paragraph(excerpt[:1600])
+                else:
+                    document.add_paragraph("Текстовый слой не найден. Возможно, PDF является сканом.")
+            else:
+                document.add_paragraph(
+                    f"Изображение {preview_context['image_width']}×{preview_context['image_height']} ({preview_context['image_mode']})"
+                )
 
         if charts:
             document.add_heading("Графики", level=1)
@@ -119,3 +126,18 @@ class ReportService:
     def _build_report_name(self, file_id: str) -> str:
         timestamp = datetime.now(tz=UTC).strftime("%Y%m%d%H%M%S")
         return f"{file_id}__report__{timestamp}.docx"
+
+    def _summary_rows(self, analysis: dict[str, Any]) -> dict[str, Any]:
+        summary = analysis["summary"]
+        if analysis.get("kind") == "pdf":
+            return {
+                "Pages": summary.get("pages", summary["rows"]),
+                "Words": summary.get("words", summary["columns"]),
+                "Characters": summary.get("characters", 0),
+            }
+        return {
+            "Rows / Height": summary["rows"],
+            "Columns / Width": summary["columns"],
+            "Numeric metrics": summary["numeric_columns"],
+            "Missing cells": summary["missing_cells"],
+        }
