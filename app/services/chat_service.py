@@ -351,6 +351,9 @@ class ChatService:
                 "format": preview["image_format"],
                 "channel_means": preview["channel_means"],
                 "storage_url": preview["storage_url"],
+                "text_excerpt": preview.get("text_excerpt"),
+                "has_text": preview.get("has_text", False),
+                "word_count": preview.get("word_count", 0),
             }
         )
         return context
@@ -569,6 +572,8 @@ class ChatService:
         return {
             "kind": "image",
             "image_url": preview["storage_url"],
+            "text_excerpt": preview.get("text_excerpt", ""),
+            "has_text": preview.get("has_text", False),
             "meta": [
                 f"{preview['image_width']}x{preview['image_height']}",
                 preview["image_mode"],

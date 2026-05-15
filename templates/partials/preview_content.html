@@ -90,8 +90,16 @@
                         <span>{{ preview.image_width }}×{{ preview.image_height }}</span>
                         <span>{{ preview.image_mode }}</span>
                         <span>{{ preview.image_format }}</span>
+                        {% if preview.has_text %}
+                            <span>OCR: {{ preview.word_count }} слов</span>
+                        {% endif %}
                     </div>
                 </div>
+                {% if preview.has_text %}
+                    <div class="text-preview text-preview--compact">
+                        <pre>{{ preview.text_excerpt }}</pre>
+                    </div>
+                {% endif %}
             {% endif %}
         </article>
 
@@ -105,52 +113,45 @@
                 <button class="primary-btn wide-btn" type="submit">Анализировать</button>
             </form>
 
-            {% if preview.kind != "pdf" %}
-                <form class="action-form" hx-post="/actions/chart/{{ preview.file.file_id }}" hx-target="#result-panel" hx-swap="outerHTML">
+            <form class="action-form" hx-post="/actions/chart/{{ preview.file.file_id }}" hx-target="#result-panel" hx-swap="outerHTML">
+                <label>
+                    <span>Тип графика</span>
+                    <select name="chart_type">
+                        <option value="line">line</option>
+                        <option value="bar">bar</option>
+                        <option value="histogram" selected>histogram</option>
+                    </select>
+                </label>
+
+                {% if preview.kind == "table" %}
                     <label>
-                        <span>Тип графика</span>
-                        <select name="chart_type">
-                            <option value="line">line</option>
-                            <option value="bar">bar</option>
-                            <option value="histogram" selected>histogram</option>
+                        <span>X column</span>
+                        <select name="x_column">
+                            {% for column in preview.dimension_columns %}
+                                <option value="{{ column }}" {% if column == preview.recommended_x %}selected{% endif %}>{{ column }}</option>
+                            {% endfor %}
+                            {% for column in preview.numeric_columns %}
+                                {% if column not in preview.dimension_columns %}
+                                    <option value="{{ column }}">{{ column }}</option>
+                                {% endif %}
+                            {% endfor %}
                         </select>
                     </label>
+                    <label>
+                        <span>Y column</span>
+                        <select name="y_column">
+                            {% for column in preview.numeric_columns %}
+                                <option value="{{ column }}" {% if column == preview.recommended_y %}selected{% endif %}>{{ column }}</option>
+                            {% endfor %}
+                            {% if not preview.numeric_columns %}
+                                <option value="">Auto</option>
+                            {% endif %}
+                        </select>
+                    </label>
+                {% endif %}
 
-                    {% if preview.kind == "table" %}
-                        <label>
-                            <span>X column</span>
-                            <select name="x_column">
-                                {% for column in preview.dimension_columns %}
-                                    <option value="{{ column }}" {% if column == preview.recommended_x %}selected{% endif %}>{{ column }}</option>
-                                {% endfor %}
-                                {% for column in preview.numeric_columns %}
-                                    {% if column not in preview.dimension_columns %}
-                                        <option value="{{ column }}">{{ column }}</option>
-                                    {% endif %}
-                                {% endfor %}
-                            </select>
-                        </label>
-                        <label>
-                            <span>Y column</span>
-                            <select name="y_column">
-                                {% for column in preview.numeric_columns %}
-                                    <option value="{{ column }}" {% if column == preview.recommended_y %}selected{% endif %}>{{ column }}</option>
-                                {% endfor %}
-                                {% if not preview.numeric_columns %}
-                                    <option value="">Auto</option>
-                                {% endif %}
-                            </select>
-                        </label>
-                    {% endif %}
-
-                    <button class="secondary-btn wide-btn" type="submit">Построить график</button>
-                </form>
-            {% else %}
-                <div class="empty-card">
-                    <strong>Графики для PDF недоступны</strong>
-                    <p>Для PDF можно собрать анализ, DOCX-отчёт и markdown-summary по извлечённому тексту.</p>
-                </div>
-            {% endif %}
+                <button class="secondary-btn wide-btn" type="submit">Построить график</button>
+            </form>
 
             <form class="action-form" hx-post="/actions/report/{{ preview.file.file_id }}" hx-target="#result-panel" hx-swap="outerHTML">
                 <button class="ghost-btn wide-btn" type="submit">Сформировать отчет</button>

@@ -71,7 +71,9 @@ class PDFSupportTest(unittest.TestCase):
         self.analysis_service = AnalysisService(self.file_service)
         self.chart_service = ChartService(self.file_service, self.settings)
         self.pdf_path = root / "sample.pdf"
-        self.pdf_path.write_bytes(build_text_pdf("PDF support works for analytics reports"))
+        self.pdf_path.write_bytes(
+            build_text_pdf("PDF support works for analytics reports\nJan 100\nFeb 200\nMar 150")
+        )
         self.stored_file = StoredFile(
             file_id="sample-pdf",
             original_name="sample.pdf",
@@ -105,9 +107,11 @@ class PDFSupportTest(unittest.TestCase):
         self.assertEqual(analysis["summary"]["pages"], 1)
         self.assertGreaterEqual(analysis["summary"]["words"], 5)
 
-    def test_pdf_chart_generation_is_not_supported(self) -> None:
-        with self.assertRaisesRegex(FileReadError, "PDF"):
-            self.chart_service.generate_chart(self.stored_file, "histogram")
+    def test_pdf_chart_generation_uses_extracted_numbers(self) -> None:
+        chart = self.chart_service.generate_chart(self.stored_file, "bar")
+
+        self.assertTrue((self.settings.output_dir / chart["file_name"]).exists())
+        self.assertIn("PDF", chart["description"])
 
     def test_pdf_without_text_layer_uses_ocr_fallback(self) -> None:
         scanned_path = Path(self.temp_dir.name) / "scanned.pdf"
@@ -142,6 +146,79 @@ class PDFSupportTest(unittest.TestCase):
         self.assertEqual(preview["text_source"], "ocr")
         self.assertEqual(preview["ocr_pages_read"], 1)
         self.assertIn("OCR распознал", preview["text_excerpt"])
+
+    def test_image_formats_open_and_ocr_text_can_drive_chart(self) -> None:
+        from PIL import Image
+
+        with patch.object(
+            FileService,
+            "read_image_text",
+            return_value={
+                "text": "",
+                "char_count": 0,
+                "word_count": 0,
+                "ocr_used": False,
+                "ocr_available": True,
+                "ocr_error": None,
+                "ocr_cached": False,
+            },
+        ):
+            for extension, image_format in (
+                (".png", "PNG"),
+                (".jpg", "JPEG"),
+                (".jpeg", "JPEG"),
+                (".bmp", "BMP"),
+                (".gif", "GIF"),
+                (".webp", "WEBP"),
+            ):
+                image_path = Path(self.temp_dir.name) / f"infographic{extension}"
+                Image.new("RGB", (240, 120), "white").save(image_path, image_format)
+                stored_image = StoredFile(
+                    file_id=f"image-{image_format.lower()}",
+                    original_name=image_path.name,
+                    saved_name=image_path.name,
+                    extension=extension,
+                    content_type=f"image/{image_format.lower()}",
+                    size_bytes=image_path.stat().st_size,
+                    kind="image",
+                    created_at="2026-05-15T00:00:00+00:00",
+                    absolute_path=str(image_path),
+                    relative_path=f"uploads/{image_path.name}",
+                )
+
+                preview = self.file_service.build_preview_context(stored_image)
+                self.assertEqual(preview["kind"], "image")
+                self.assertGreater(preview["image_width"], 0)
+
+        infographic = StoredFile(
+            file_id="image-ocr-chart",
+            original_name="infographic.png",
+            saved_name="infographic.png",
+            extension=".png",
+            content_type="image/png",
+            size_bytes=(Path(self.temp_dir.name) / "infographic.png").stat().st_size,
+            kind="image",
+            created_at="2026-05-15T00:00:00+00:00",
+            absolute_path=str(Path(self.temp_dir.name) / "infographic.png"),
+            relative_path="uploads/infographic.png",
+        )
+        with patch.object(
+            FileService,
+            "read_image_text",
+            return_value={
+                "text": "Product A 120\nProduct B 80\nProduct C 160",
+                "char_count": 38,
+                "word_count": 9,
+                "ocr_used": True,
+                "ocr_available": True,
+                "ocr_error": None,
+                "ocr_cached": False,
+            },
+        ):
+            chart = self.chart_service.generate_chart(infographic, "bar")
+
+        self.assertTrue((self.settings.output_dir / chart["file_name"]).exists())
+        self.assertIn("OCR изображения", chart["description"])
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from app.services.file_service import FileService, StoredFile
+from app.services.file_service import FileReadError, FileService, StoredFile
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,19 @@ class AnalysisService:
             f"Средняя яркость: {grayscale.mean():.2f}.",
             "Для изображений доступны histogram, bar и line графики на основе пиксельных значений.",
         ]
+        ocr = self.file_service.read_image_text(stored_file)
+        if ocr["text"].strip():
+            insights.append(f"OCR распознал текст на изображении: примерно {ocr['word_count']} слов.")
+            try:
+                extracted_frame = self.file_service.read_extracted_dataframe(stored_file)
+                insights.append(
+                    f"Из OCR-текста извлечены данные для графиков: "
+                    f"{len(extracted_frame)} строк и {len(extracted_frame.columns)} колонок."
+                )
+            except FileReadError:
+                insights.append("OCR-текст найден, но табличные или числовые данные для графика не выделены.")
+        elif ocr["ocr_error"]:
+            insights.append(f"OCR изображения: {ocr['ocr_error']}")
 
         if array.ndim == 3:
             channel_names = list(image.getbands())
@@ -193,6 +206,15 @@ class AnalysisService:
         if top_terms:
             terms = ", ".join(term for term, _ in top_terms[:5])
             insights.append(f"Самые частые содержательные термины: {terms}.")
+        try:
+            extracted_frame = self.file_service.read_extracted_dataframe(stored_file)
+            insights.append(
+                f"Из PDF извлечены данные для графиков: "
+                f"{len(extracted_frame)} строк и {len(extracted_frame.columns)} колонок."
+            )
+        except FileReadError:
+            if text.strip():
+                insights.append("Текст PDF найден, но табличные или числовые данные для графика не выделены.")
 
         logger.info("Completed PDF analysis for %s", stored_file.file_id)
         return {

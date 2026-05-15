@@ -188,12 +188,113 @@ class FileService:
 
     def open_image(self, stored_file: StoredFile) -> Image.Image:
         try:
-            image = Image.open(stored_file.path)
-            image.load()
+            with Image.open(stored_file.path) as image:
+                image.load()
+                loaded_image = image.copy()
+                loaded_image.format = image.format
         except (FileNotFoundError, UnidentifiedImageError, OSError) as exc:
             logger.exception("Failed to open image %s", stored_file.path)
             raise FileReadError("Не удалось прочитать изображение.") from exc
-        return image
+        return loaded_image
+
+    def read_image_text(self, stored_file: StoredFile) -> dict[str, Any]:
+        if stored_file.kind != "image":
+            raise FileReadError("Этот файл не является изображением.")
+
+        if not self.settings.pdf_ocr_enabled:
+            return {
+                "text": "",
+                "char_count": 0,
+                "word_count": 0,
+                "ocr_used": False,
+                "ocr_available": False,
+                "ocr_error": "OCR отключён настройкой `PDF_OCR_ENABLED=false`.",
+                "ocr_cached": False,
+            }
+
+        if pytesseract is None:
+            return {
+                "text": "",
+                "char_count": 0,
+                "word_count": 0,
+                "ocr_used": False,
+                "ocr_available": False,
+                "ocr_error": "OCR недоступен: установите `pytesseract` и Tesseract.",
+                "ocr_cached": False,
+            }
+
+        cached = self._read_ocr_cache(stored_file)
+        if cached:
+            text = cached["text"]
+            words = re.findall(r"[\wА-Яа-яЁё]+", text, flags=re.UNICODE)
+            return {
+                "text": text,
+                "char_count": len(text),
+                "word_count": len(words),
+                "ocr_used": bool(text.strip()),
+                "ocr_available": True,
+                "ocr_error": cached["error"],
+                "ocr_cached": True,
+            }
+
+        try:
+            image = self.open_image(stored_file).convert("RGB")
+            if max(image.size) < 1400:
+                width, height = image.size
+                image = image.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
+            text = pytesseract.image_to_string(image, lang=self.settings.pdf_ocr_languages).strip()
+        except TesseractNotFoundError:
+            return {
+                "text": "",
+                "char_count": 0,
+                "word_count": 0,
+                "ocr_used": False,
+                "ocr_available": False,
+                "ocr_error": "OCR недоступен: бинарный файл Tesseract не найден.",
+                "ocr_cached": False,
+            }
+        except TesseractError as exc:
+            logger.exception("Tesseract OCR failed for image %s", stored_file.path)
+            return {
+                "text": "",
+                "char_count": 0,
+                "word_count": 0,
+                "ocr_used": False,
+                "ocr_available": True,
+                "ocr_error": f"OCR не удалось выполнить: {exc}.",
+                "ocr_cached": False,
+            }
+
+        error = None if text else "OCR выполнен, но текст не распознан."
+        self._write_ocr_cache(stored_file, {"text": text, "pages_read": 1, "error": error})
+        words = re.findall(r"[\wА-Яа-яЁё]+", text, flags=re.UNICODE)
+        return {
+            "text": text,
+            "char_count": len(text),
+            "word_count": len(words),
+            "ocr_used": bool(text),
+            "ocr_available": True,
+            "ocr_error": error,
+            "ocr_cached": False,
+        }
+
+    def read_extracted_dataframe(self, stored_file: StoredFile) -> pd.DataFrame:
+        if stored_file.kind == "table":
+            return self.read_dataframe(stored_file)
+        if stored_file.kind == "pdf":
+            text = self.read_pdf_text(stored_file)["text"]
+        elif stored_file.kind == "image":
+            text = self.read_image_text(stored_file)["text"]
+        else:
+            raise FileReadError("Для этого типа файла нельзя извлечь данные для графика.")
+
+        dataframe = self._dataframe_from_text(text)
+        if dataframe.empty:
+            raise FileReadError(
+                "Не удалось извлечь табличные или числовые данные для графика. "
+                "Нужны строки с числами, таблица или пары вида `показатель 100`."
+            )
+        return dataframe
 
     def read_pdf_text(self, stored_file: StoredFile, max_pages: int | None = None) -> dict[str, Any]:
         if PdfReader is None:
@@ -368,6 +469,7 @@ class FileService:
     def _ocr_cache_key(self, stored_file: StoredFile) -> dict[str, Any]:
         return {
             "file_id": stored_file.file_id,
+            "kind": stored_file.kind,
             "size_bytes": stored_file.size_bytes,
             "languages": self.settings.pdf_ocr_languages,
             "dpi": self.settings.pdf_ocr_dpi,
@@ -429,6 +531,7 @@ class FileService:
             }
 
         image = self.open_image(stored_file)
+        ocr = self.read_image_text(stored_file)
         array = np.array(image)
         channel_means = (
             np.round(array.reshape(-1, array.shape[-1]).mean(axis=0), 2).tolist()
@@ -443,7 +546,111 @@ class FileService:
             "image_mode": image.mode,
             "image_format": image.format or stored_file.extension.replace(".", "").upper(),
             "channel_means": channel_means,
+            "text_excerpt": ocr["text"][:2000],
+            "has_text": bool(ocr["text"].strip()),
+            "ocr_used": ocr["ocr_used"],
+            "ocr_available": ocr["ocr_available"],
+            "ocr_error": ocr["ocr_error"],
+            "ocr_cached": ocr["ocr_cached"],
+            "word_count": ocr["word_count"],
+            "char_count": ocr["char_count"],
         }
+
+    def _dataframe_from_text(self, text: str) -> pd.DataFrame:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return pd.DataFrame()
+
+        table = self._parse_delimited_text_table(lines)
+        if not table.empty:
+            return table
+
+        pairs = []
+        for line in lines:
+            match = re.match(r"^(.+?)(?:[:=—–-]\s*|\s+)([-+]?\d[\d\s.,]*(?:[%₽$€]|руб\.?)?)$", line)
+            if not match:
+                continue
+            label = re.sub(r"\s+", " ", match.group(1)).strip(" -:—–")
+            value = self._parse_number(match.group(2))
+            if label and value is not None:
+                pairs.append({"Показатель": label, "Значение": value})
+
+        if len(pairs) >= 2:
+            return pd.DataFrame(pairs)
+
+        return pd.DataFrame()
+
+    def _parse_delimited_text_table(self, lines: list[str]) -> pd.DataFrame:
+        for splitter in self._table_splitters():
+            rows = []
+            for line in lines:
+                cells = [cell.strip() for cell in splitter(line) if cell.strip()]
+                if len(cells) >= 2:
+                    rows.append(cells)
+            if len(rows) < 2:
+                continue
+
+            common_width = max({len(row) for row in rows}, key=[len(row) for row in rows].count)
+            aligned = [row for row in rows if len(row) == common_width]
+            if len(aligned) < 2:
+                continue
+
+            first_row_has_number = any(self._parse_number(cell) is not None for cell in aligned[0])
+            if first_row_has_number:
+                headers = [f"Колонка {index + 1}" for index in range(common_width)]
+                data_rows = aligned
+            else:
+                headers = [cell or f"Колонка {index + 1}" for index, cell in enumerate(aligned[0])]
+                data_rows = aligned[1:]
+
+            dataframe = pd.DataFrame(data_rows, columns=headers)
+            dataframe = self._coerce_dataframe_values(dataframe)
+            if dataframe.select_dtypes(include=[np.number]).empty:
+                continue
+            return dataframe
+
+        return pd.DataFrame()
+
+    def _table_splitters(self):
+        return [
+            lambda line: line.strip("|").split("|") if "|" in line else [],
+            lambda line: line.split("\t") if "\t" in line else [],
+            lambda line: line.split(";") if ";" in line else [],
+            lambda line: line.split(",") if line.count(",") >= 2 else [],
+            lambda line: re.split(r"\s{2,}", line) if re.search(r"\s{2,}", line) else [],
+        ]
+
+    def _coerce_dataframe_values(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        result = dataframe.copy()
+        for column in result.columns:
+            parsed = result[column].map(self._parse_number)
+            non_null_ratio = parsed.notna().mean()
+            if non_null_ratio >= 0.6:
+                result[column] = parsed
+        return result
+
+    def _parse_number(self, value: Any) -> float | None:
+        text = str(value).strip()
+        if not re.search(r"\d", text):
+            return None
+
+        cleaned = text.replace("\u00a0", " ")
+        cleaned = re.sub(r"[%₽$€]|руб\.?", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"[^\d,.\-+ ]", "", cleaned)
+        cleaned = cleaned.replace(" ", "")
+
+        if "," in cleaned and "." in cleaned:
+            if cleaned.rfind(",") > cleaned.rfind("."):
+                cleaned = cleaned.replace(".", "").replace(",", ".")
+            else:
+                cleaned = cleaned.replace(",", "")
+        elif "," in cleaned:
+            cleaned = cleaned.replace(",", ".")
+
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
 
     def describe_columns(self, dataframe: pd.DataFrame) -> list[dict[str, Any]]:
         descriptions: list[dict[str, Any]] = []

@@ -39,9 +39,9 @@ class ChartService:
         if stored_file.kind == "table":
             chart = self._generate_table_chart(stored_file, chart_type, x_column, y_column)
         elif stored_file.kind == "image":
-            chart = self._generate_image_chart(stored_file, chart_type)
+            chart = self._generate_image_or_ocr_chart(stored_file, chart_type, x_column, y_column)
         else:
-            raise FileReadError("Для PDF графики не поддерживаются. Запустите анализ, отчёт или markdown-сводку.")
+            chart = self._generate_extracted_data_chart(stored_file, chart_type, x_column, y_column, "PDF")
 
         logger.info("Generated %s chart for %s", chart_type, stored_file.file_id)
         return chart
@@ -63,6 +63,49 @@ class ChartService:
         y_column: str | None,
     ) -> dict[str, Any]:
         dataframe = self.file_service.read_dataframe(stored_file)
+        return self._generate_dataframe_chart(stored_file, dataframe, chart_type, x_column, y_column)
+
+    def _generate_extracted_data_chart(
+        self,
+        stored_file: StoredFile,
+        chart_type: str,
+        x_column: str | None,
+        y_column: str | None,
+        source_label: str,
+    ) -> dict[str, Any]:
+        dataframe = self.file_service.read_extracted_dataframe(stored_file)
+        chart = self._generate_dataframe_chart(stored_file, dataframe, chart_type, x_column, y_column)
+        chart["description"] = f"{chart['description']} Источник данных: {source_label}."
+        return chart
+
+    def _generate_image_or_ocr_chart(
+        self,
+        stored_file: StoredFile,
+        chart_type: str,
+        x_column: str | None,
+        y_column: str | None,
+    ) -> dict[str, Any]:
+        try:
+            return self._generate_extracted_data_chart(
+                stored_file,
+                chart_type,
+                x_column,
+                y_column,
+                "OCR изображения",
+            )
+        except FileReadError:
+            if x_column or y_column:
+                raise
+            return self._generate_image_chart(stored_file, chart_type)
+
+    def _generate_dataframe_chart(
+        self,
+        stored_file: StoredFile,
+        dataframe: pd.DataFrame,
+        chart_type: str,
+        x_column: str | None,
+        y_column: str | None,
+    ) -> dict[str, Any]:
         columns = self.file_service.describe_columns(dataframe)
         numeric_columns = [item["name"] for item in columns if item["kind"] == "numeric"]
         dimension_columns = [item["name"] for item in columns if item["kind"] in {"categorical", "datetime"}]

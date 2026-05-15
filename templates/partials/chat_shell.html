@@ -112,6 +112,11 @@
                                             <span>{{ item }}</span>
                                         {% endfor %}
                                     </div>
+                                    {% if message.preview.has_text %}
+                                        <div class="text-preview text-preview--compact">
+                                            <pre>{{ message.preview.text_excerpt }}</pre>
+                                        </div>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -254,7 +259,15 @@
                             <span>{{ active_preview.image_width }}x{{ active_preview.image_height }}</span>
                             <span>{{ active_preview.image_mode }}</span>
                             <span>{{ active_preview.image_format }}</span>
+                            {% if active_preview.has_text %}
+                                <span>OCR: {{ active_preview.word_count }} слов</span>
+                            {% endif %}
                         </div>
+                        {% if active_preview.has_text %}
+                            <div class="text-preview text-preview--compact">
+                                <pre>{{ active_preview.text_excerpt }}</pre>
+                            </div>
+                        {% endif %}
                     {% endif %}
                 </div>
             {% else %}
@@ -273,7 +286,7 @@
                 <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Строим график, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Построй histogram для активного файла">
                     <input type="hidden" name="force_action" value="chart">
-                    <button class="primary-btn action-btn action-btn--chart wide-btn" type="submit" data-processing-label="Строим график, пожалуйста подождите…" {% if not active_preview or active_preview.kind == "pdf" %}disabled{% endif %}>Построить график</button>
+                    <button class="primary-btn action-btn action-btn--chart wide-btn" type="submit" data-processing-label="Строим график, пожалуйста подождите…" {% if not active_preview %}disabled{% endif %}>Построить график</button>
                 </form>
                 <form hx-post="/chat/{{ conversation.conversation_id }}/message" hx-target="#page-shell" hx-swap="outerHTML" hx-indicator="#processing-panel" data-progress-form data-processing-label="Создаём DOCX-отчёт, пожалуйста подождите…">
                     <input type="hidden" name="message_text" value="Сформируй отчёт по активному файлу">
