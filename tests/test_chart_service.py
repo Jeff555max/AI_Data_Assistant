@@ -28,6 +28,10 @@ class ChartServiceTest(unittest.TestCase):
             openai_api_key=None,
             openai_model="gpt-4o",
             openai_max_history_messages=8,
+            pdf_ocr_enabled=True,
+            pdf_ocr_languages="rus+eng",
+            pdf_ocr_dpi=200,
+            pdf_ocr_max_pages=20,
         )
         self.file_service = FileService(self.settings)
         self.chart_service = ChartService(self.file_service, self.settings)

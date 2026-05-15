@@ -1,6 +1,9 @@
+name: ai-data-assistant
+
 services:
   web:
     build: .
+    image: ai-data-assistant:latest
     container_name: data-assistant
     env_file:
       - .env

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.core.config import BASE_DIR, Settings
 from app.services.analysis_service import AnalysisService
@@ -61,6 +62,10 @@ class PDFSupportTest(unittest.TestCase):
             openai_api_key=None,
             openai_model="gpt-4o",
             openai_max_history_messages=8,
+            pdf_ocr_enabled=True,
+            pdf_ocr_languages="rus+eng",
+            pdf_ocr_dpi=200,
+            pdf_ocr_max_pages=20,
         )
         self.file_service = FileService(self.settings)
         self.analysis_service = AnalysisService(self.file_service)
@@ -89,6 +94,8 @@ class PDFSupportTest(unittest.TestCase):
         self.assertEqual(preview["kind"], "pdf")
         self.assertEqual(preview["page_count"], 1)
         self.assertTrue(preview["has_text"])
+        self.assertFalse(preview["ocr_used"])
+        self.assertEqual(preview["text_source"], "text_layer")
         self.assertIn("PDF support works", preview["text_excerpt"])
 
     def test_pdf_analysis_uses_document_metrics(self) -> None:
@@ -101,6 +108,40 @@ class PDFSupportTest(unittest.TestCase):
     def test_pdf_chart_generation_is_not_supported(self) -> None:
         with self.assertRaisesRegex(FileReadError, "PDF"):
             self.chart_service.generate_chart(self.stored_file, "histogram")
+
+    def test_pdf_without_text_layer_uses_ocr_fallback(self) -> None:
+        scanned_path = Path(self.temp_dir.name) / "scanned.pdf"
+        scanned_path.write_bytes(build_text_pdf(""))
+        scanned_file = StoredFile(
+            file_id="scanned-pdf",
+            original_name="scanned.pdf",
+            saved_name="scanned.pdf",
+            extension=".pdf",
+            content_type="application/pdf",
+            size_bytes=scanned_path.stat().st_size,
+            kind="pdf",
+            created_at="2026-05-15T00:00:00+00:00",
+            absolute_path=str(scanned_path),
+            relative_path="uploads/scanned.pdf",
+        )
+
+        with patch.object(
+            FileService,
+            "_read_pdf_text_with_ocr",
+            return_value={
+                "text": "OCR распознал сканированный PDF",
+                "pages_read": 1,
+                "error": None,
+                "cached": False,
+            },
+        ):
+            preview = self.file_service.build_preview_context(scanned_file)
+
+        self.assertTrue(preview["has_text"])
+        self.assertTrue(preview["ocr_used"])
+        self.assertEqual(preview["text_source"], "ocr")
+        self.assertEqual(preview["ocr_pages_read"], 1)
+        self.assertIn("OCR распознал", preview["text_excerpt"])
 
 
 if __name__ == "__main__":

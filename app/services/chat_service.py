@@ -333,6 +333,10 @@ class ChatService:
                     "char_count": preview["char_count"],
                     "text_excerpt": preview["text_excerpt"],
                     "has_text": preview["has_text"],
+                    "text_source": preview["text_source"],
+                    "ocr_used": preview["ocr_used"],
+                    "ocr_pages_read": preview["ocr_pages_read"],
+                    "ocr_error": preview["ocr_error"],
                     "insights": analysis["insights"][:5],
                 }
             )
@@ -552,6 +556,10 @@ class ChatService:
                 "text_excerpt": preview["text_excerpt"],
                 "has_text": preview["has_text"],
                 "storage_url": preview["storage_url"],
+                "text_source": preview["text_source"],
+                "ocr_used": preview["ocr_used"],
+                "ocr_pages_read": preview["ocr_pages_read"],
+                "ocr_error": preview["ocr_error"],
                 "meta": [
                     f"{preview['page_count']} стр.",
                     f"{preview['word_count']} слов",

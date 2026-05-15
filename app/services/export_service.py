@@ -48,8 +48,11 @@ class ExportService:
                         f"- Pages: {summary.get('pages', summary.get('rows', 0))}",
                         f"- Words: {summary.get('words', summary.get('columns', 0))}",
                         f"- Characters: {summary.get('characters', 0)}",
+                        f"- OCR used: {summary.get('ocr_used', False)}",
                     ]
                 )
+                if summary.get("ocr_used"):
+                    lines.append(f"- OCR pages: {summary.get('ocr_pages_read', 0)}")
             else:
                 lines.extend(
                     [

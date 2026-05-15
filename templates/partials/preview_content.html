@@ -68,6 +68,9 @@
                     <span>{{ preview.page_count }} стр.</span>
                     <span>{{ preview.word_count }} слов</span>
                     <span>{{ preview.char_count }} символов</span>
+                    {% if preview.ocr_used %}
+                        <span>OCR: {{ preview.ocr_pages_read }} стр.</span>
+                    {% endif %}
                 </div>
 
                 {% if preview.has_text %}
@@ -76,8 +79,8 @@
                     </div>
                 {% else %}
                     <div class="empty-card">
-                        <strong>Текстовый слой не найден</strong>
-                        <p>PDF загружен, но выглядит как скан или защищённый документ без извлекаемого текста.</p>
+                        <strong>Текст не распознан</strong>
+                        <p>{{ preview.ocr_error or "PDF загружен, но текст не удалось получить из текстового слоя или через OCR." }}</p>
                     </div>
                 {% endif %}
             {% else %}

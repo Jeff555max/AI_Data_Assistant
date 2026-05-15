@@ -14,6 +14,7 @@ load_dotenv(BASE_DIR / ".env")
 
 SIZE_PATTERN = re.compile(r"^\s*(\d+)\s*(B|KB|MB|GB)?\s*$", re.IGNORECASE)
 SIZE_UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
+TRUE_VALUES = {"1", "true", "yes", "on", "y"}
 
 
 def parse_size_to_bytes(raw_value: str) -> int:
@@ -23,6 +24,12 @@ def parse_size_to_bytes(raw_value: str) -> int:
     amount = int(match.group(1))
     unit = (match.group(2) or "B").upper()
     return amount * SIZE_UNITS[unit]
+
+
+def parse_bool(raw_value: str | None, default: bool = False) -> bool:
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in TRUE_VALUES
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,10 @@ class Settings:
     openai_api_key: str | None
     openai_model: str
     openai_max_history_messages: int
+    pdf_ocr_enabled: bool
+    pdf_ocr_languages: str
+    pdf_ocr_dpi: int
+    pdf_ocr_max_pages: int
 
 
 @lru_cache
@@ -62,4 +73,8 @@ def get_settings() -> Settings:
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
         openai_max_history_messages=int(os.getenv("OPENAI_MAX_HISTORY_MESSAGES", "8")),
+        pdf_ocr_enabled=parse_bool(os.getenv("PDF_OCR_ENABLED"), default=True),
+        pdf_ocr_languages=os.getenv("PDF_OCR_LANGUAGES", "rus+eng"),
+        pdf_ocr_dpi=int(os.getenv("PDF_OCR_DPI", "200")),
+        pdf_ocr_max_pages=int(os.getenv("PDF_OCR_MAX_PAGES", "20")),
     )

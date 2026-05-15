@@ -96,11 +96,16 @@ class ReportService:
                     f"{preview_context['word_count']} слов, "
                     f"{preview_context['char_count']} символов."
                 )
+                if preview_context.get("ocr_used"):
+                    document.add_paragraph(
+                        f"Текст распознан через OCR: обработано {preview_context['ocr_pages_read']} стр."
+                    )
                 excerpt = preview_context.get("text_excerpt", "").strip()
                 if excerpt:
                     document.add_paragraph(excerpt[:1600])
                 else:
-                    document.add_paragraph("Текстовый слой не найден. Возможно, PDF является сканом.")
+                    error = preview_context.get("ocr_error")
+                    document.add_paragraph(error or "Текст не удалось получить из PDF.")
             else:
                 document.add_paragraph(
                     f"Изображение {preview_context['image_width']}×{preview_context['image_height']} ({preview_context['image_mode']})"
@@ -130,11 +135,14 @@ class ReportService:
     def _summary_rows(self, analysis: dict[str, Any]) -> dict[str, Any]:
         summary = analysis["summary"]
         if analysis.get("kind") == "pdf":
-            return {
+            rows = {
                 "Pages": summary.get("pages", summary["rows"]),
                 "Words": summary.get("words", summary["columns"]),
                 "Characters": summary.get("characters", 0),
             }
+            if summary.get("ocr_used"):
+                rows["OCR pages"] = summary.get("ocr_pages_read", 0)
+            return rows
         return {
             "Rows / Height": summary["rows"],
             "Columns / Width": summary["columns"],

@@ -18,6 +18,9 @@
                         <span>{{ analysis.summary.pages }} стр.</span>
                         <span>{{ analysis.summary.words }} слов</span>
                         <span>{{ analysis.summary.characters }} символов</span>
+                        {% if analysis.summary.ocr_used %}
+                            <span>OCR: {{ analysis.summary.ocr_pages_read }} стр.</span>
+                        {% endif %}
                     </div>
                 {% else %}
                     <div class="stats-strip">

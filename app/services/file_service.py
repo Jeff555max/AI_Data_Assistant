@@ -22,6 +22,19 @@ try:
 except ImportError:  # pragma: no cover - handled at runtime when dependency is absent
     PdfReader = None  # type: ignore[assignment]
 
+try:
+    import fitz
+except ImportError:  # pragma: no cover - handled at runtime when dependency is absent
+    fitz = None  # type: ignore[assignment]
+
+try:
+    import pytesseract
+    from pytesseract import TesseractError, TesseractNotFoundError
+except ImportError:  # pragma: no cover - handled at runtime when dependency is absent
+    pytesseract = None  # type: ignore[assignment]
+    TesseractError = RuntimeError  # type: ignore[assignment]
+    TesseractNotFoundError = RuntimeError  # type: ignore[assignment]
+
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +224,19 @@ class FileService:
             raise FileReadError("Не удалось прочитать PDF. Проверьте формат и защиту файла.") from exc
 
         text = "\n\n".join(item for item in page_texts if item)
+        text_source = "text_layer" if self._has_meaningful_pdf_text(text) else "none"
+        ocr_result = {
+            "text": "",
+            "pages_read": 0,
+            "error": None,
+            "cached": False,
+        }
+        if text_source == "none" and self.settings.pdf_ocr_enabled:
+            ocr_result = self._read_pdf_text_with_ocr(stored_file, page_count)
+            if ocr_result["text"].strip():
+                text = ocr_result["text"]
+                text_source = "ocr"
+
         words = re.findall(r"[\wА-Яа-яЁё]+", text, flags=re.UNICODE)
         return {
             "page_count": page_count,
@@ -218,6 +244,134 @@ class FileService:
             "text": text,
             "char_count": len(text),
             "word_count": len(words),
+            "text_source": text_source,
+            "ocr_used": text_source == "ocr",
+            "ocr_enabled": self.settings.pdf_ocr_enabled,
+            "ocr_available": fitz is not None and pytesseract is not None,
+            "ocr_error": ocr_result["error"],
+            "ocr_pages_read": ocr_result["pages_read"],
+            "ocr_page_limit": self.settings.pdf_ocr_max_pages,
+            "ocr_cached": ocr_result["cached"],
+        }
+
+    def _read_pdf_text_with_ocr(self, stored_file: StoredFile, page_count: int) -> dict[str, Any]:
+        if fitz is None or pytesseract is None:
+            return {
+                "text": "",
+                "pages_read": 0,
+                "error": "OCR недоступен: установите `PyMuPDF`, `pytesseract` и Tesseract.",
+                "cached": False,
+            }
+
+        cached = self._read_ocr_cache(stored_file)
+        if cached:
+            return {**cached, "cached": True}
+
+        pages_to_read = min(page_count, max(self.settings.pdf_ocr_max_pages, 0))
+        if pages_to_read == 0:
+            return {
+                "text": "",
+                "pages_read": 0,
+                "error": "OCR отключён лимитом `PDF_OCR_MAX_PAGES=0`.",
+                "cached": False,
+            }
+
+        scale = max(self.settings.pdf_ocr_dpi, 72) / 72
+        matrix = fitz.Matrix(scale, scale)
+        page_texts: list[str] = []
+
+        try:
+            with fitz.open(str(stored_file.path)) as document:
+                for page_number in range(min(pages_to_read, len(document))):
+                    page = document.load_page(page_number)
+                    pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+                    image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+                    text = pytesseract.image_to_string(
+                        image,
+                        lang=self.settings.pdf_ocr_languages,
+                    )
+                    page_texts.append(text.strip())
+        except TesseractNotFoundError:
+            return {
+                "text": "",
+                "pages_read": 0,
+                "error": "OCR недоступен: бинарный файл Tesseract не найден.",
+                "cached": False,
+            }
+        except TesseractError as exc:
+            logger.exception("Tesseract OCR failed for %s", stored_file.path)
+            return {
+                "text": "",
+                "pages_read": len(page_texts),
+                "error": f"OCR не удалось выполнить: {exc}.",
+                "cached": False,
+            }
+        except Exception as exc:
+            logger.exception("Failed to OCR PDF %s", stored_file.path)
+            return {
+                "text": "",
+                "pages_read": len(page_texts),
+                "error": "OCR не удалось выполнить. Проверьте PDF и настройки распознавания.",
+                "cached": False,
+            }
+
+        text = "\n\n".join(item for item in page_texts if item)
+        result = {
+            "text": text,
+            "pages_read": len(page_texts),
+            "error": None if text.strip() else "OCR выполнен, но текст не распознан.",
+        }
+        self._write_ocr_cache(stored_file, result)
+        return {**result, "cached": False}
+
+    def _has_meaningful_pdf_text(self, text: str) -> bool:
+        words = re.findall(r"[\wА-Яа-яЁё]+", text, flags=re.UNICODE)
+        return len(words) >= 5
+
+    def _read_ocr_cache(self, stored_file: StoredFile) -> dict[str, Any] | None:
+        cache_path = self._ocr_cache_path(stored_file)
+        if not cache_path.exists():
+            return None
+
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        cache_key = self._ocr_cache_key(stored_file)
+        if payload.get("cache_key") != cache_key:
+            return None
+
+        return {
+            "text": str(payload.get("text", "")),
+            "pages_read": int(payload.get("pages_read", 0)),
+            "error": payload.get("error"),
+        }
+
+    def _write_ocr_cache(self, stored_file: StoredFile, result: dict[str, Any]) -> None:
+        self.ensure_storage()
+        payload = {
+            "cache_key": self._ocr_cache_key(stored_file),
+            "text": result["text"],
+            "pages_read": result["pages_read"],
+            "error": result["error"],
+            "created_at": _utc_now(),
+        }
+        self._ocr_cache_path(stored_file).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def _ocr_cache_path(self, stored_file: StoredFile) -> Path:
+        return self.settings.upload_dir / f"{stored_file.file_id}.ocr.json"
+
+    def _ocr_cache_key(self, stored_file: StoredFile) -> dict[str, Any]:
+        return {
+            "file_id": stored_file.file_id,
+            "size_bytes": stored_file.size_bytes,
+            "languages": self.settings.pdf_ocr_languages,
+            "dpi": self.settings.pdf_ocr_dpi,
+            "max_pages": self.settings.pdf_ocr_max_pages,
         }
 
     def build_preview_context(self, stored_file: StoredFile, rows: int = 15) -> dict[str, Any]:
@@ -264,6 +418,14 @@ class FileService:
                 "char_count": pdf["char_count"],
                 "text_excerpt": excerpt,
                 "has_text": bool(excerpt.strip()),
+                "text_source": pdf["text_source"],
+                "ocr_used": pdf["ocr_used"],
+                "ocr_enabled": pdf["ocr_enabled"],
+                "ocr_available": pdf["ocr_available"],
+                "ocr_error": pdf["ocr_error"],
+                "ocr_pages_read": pdf["ocr_pages_read"],
+                "ocr_page_limit": pdf["ocr_page_limit"],
+                "ocr_cached": pdf["ocr_cached"],
             }
 
         image = self.open_image(stored_file)

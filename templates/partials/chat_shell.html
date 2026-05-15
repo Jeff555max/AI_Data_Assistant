@@ -94,13 +94,16 @@
                                         {% for item in message.preview.meta %}
                                             <span>{{ item }}</span>
                                         {% endfor %}
+                                        {% if message.preview.ocr_used %}
+                                            <span>OCR: {{ message.preview.ocr_pages_read }} стр.</span>
+                                        {% endif %}
                                     </div>
                                     {% if message.preview.has_text %}
                                         <div class="text-preview text-preview--compact">
                                             <pre>{{ message.preview.text_excerpt }}</pre>
                                         </div>
                                     {% else %}
-                                        <p class="muted-note">В PDF не найден извлекаемый текстовый слой.</p>
+                                        <p class="muted-note">{{ message.preview.ocr_error or "Текст не удалось получить из PDF." }}</p>
                                     {% endif %}
                                 {% else %}
                                     <img class="message-preview-image" src="{{ message.preview.image_url }}" alt="Preview">
@@ -234,13 +237,16 @@
                             <span>{{ active_preview.page_count }} стр.</span>
                             <span>{{ active_preview.word_count }} слов</span>
                             <span>{{ active_preview.char_count }} символов</span>
+                            {% if active_preview.ocr_used %}
+                                <span>OCR: {{ active_preview.ocr_pages_read }} стр.</span>
+                            {% endif %}
                         </div>
                         {% if active_preview.has_text %}
                             <div class="text-preview text-preview--compact">
                                 <pre>{{ active_preview.text_excerpt }}</pre>
                             </div>
                         {% else %}
-                            <p class="muted-note">В PDF не найден извлекаемый текстовый слой.</p>
+                            <p class="muted-note">{{ active_preview.ocr_error or "Текст не удалось получить из PDF." }}</p>
                         {% endif %}
                     {% else %}
                         <img class="message-preview-image" src="{{ active_preview.storage_url }}" alt="{{ active_preview.file.original_name }}">

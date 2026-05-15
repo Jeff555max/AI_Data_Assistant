@@ -156,7 +156,15 @@ class AnalysisService:
             {"metric": "Страниц", "value": self.file_service.format_value(pdf["page_count"])},
             {"metric": "Слов", "value": self.file_service.format_value(pdf["word_count"])},
             {"metric": "Символов", "value": self.file_service.format_value(pdf["char_count"])},
+            {"metric": "Источник текста", "value": self._pdf_text_source_label(pdf)},
         ]
+        if pdf["ocr_used"]:
+            stats.append(
+                {
+                    "metric": "OCR страниц",
+                    "value": self.file_service.format_value(pdf["ocr_pages_read"]),
+                }
+            )
         if top_terms:
             stats.extend(
                 {
@@ -170,11 +178,18 @@ class AnalysisService:
             f"PDF содержит {pdf['page_count']} стр. и примерно {pdf['word_count']:,} слов.".replace(",", " "),
         ]
         if text.strip():
-            insights.append("Текст успешно извлечён и доступен для AI-анализа, отчёта и markdown-сводки.")
+            if pdf["ocr_used"]:
+                insights.append(
+                    f"Текстовый слой не найден, поэтому выполнено OCR-распознавание "
+                    f"{pdf['ocr_pages_read']} стр. Текст доступен для AI-анализа, отчёта и markdown-сводки."
+                )
+            else:
+                insights.append("Текст успешно извлечён и доступен для AI-анализа, отчёта и markdown-сводки.")
         else:
-            insights.append(
-                "Из PDF не удалось извлечь текстовый слой. Возможно, это скан; для глубокого анализа понадобится OCR."
-            )
+            if pdf["ocr_error"]:
+                insights.append(f"Из PDF не удалось получить текст. {pdf['ocr_error']}")
+            else:
+                insights.append("Из PDF не удалось получить текст ни из текстового слоя, ни через OCR.")
         if top_terms:
             terms = ", ".join(term for term, _ in top_terms[:5])
             insights.append(f"Самые частые содержательные термины: {terms}.")
@@ -190,6 +205,8 @@ class AnalysisService:
                 "pages": int(pdf["page_count"]),
                 "words": int(pdf["word_count"]),
                 "characters": int(pdf["char_count"]),
+                "ocr_used": bool(pdf["ocr_used"]),
+                "ocr_pages_read": int(pdf["ocr_pages_read"]),
             },
             "column_profile": [],
             "stats": stats,
@@ -233,3 +250,10 @@ class AnalysisService:
             "мы",
             "вы",
         }
+
+    def _pdf_text_source_label(self, pdf: dict[str, Any]) -> str:
+        if pdf["text_source"] == "ocr":
+            return "OCR"
+        if pdf["text_source"] == "text_layer":
+            return "Текстовый слой"
+        return "Не найден"
