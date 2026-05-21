@@ -3,7 +3,7 @@
 AI-чат на FastAPI + Jinja2 + HTMX, который использует OpenAI API для ответов по данным и анализа изображений, а локально строит графики и сохраняет артефакты в файлы.
 
 # Пример реализации
-- [Демонстрация проекта](https://drive.google.com/file/d/1SaDkoBEKnJPdzXmwD1rph1p4wtxKASNI/view?usp=sharing)
+- [Демонстрация проекта](https://disk.yandex.ru/i/4gzm46b1jwNbHw)
 
 *Нажмите на ссылку для просмотра видео*
 
